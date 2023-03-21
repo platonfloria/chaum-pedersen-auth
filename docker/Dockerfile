@@ -1,30 +1,39 @@
 # syntax=docker/dockerfile:experimental
 # -- Base Image --
 # Installs application dependencies
-FROM python:3.9.0 as base
+FROM rust:slim-buster as builder
 
 ARG VERSION
 
-ENV PYTHONUNBUFFERED 1
 ENV VERSION=$VERSION
 
-# Install dependecy manager
-RUN pip install poetry \
- && poetry config virtualenvs.create false
+# Install dependencies
+RUN apt update \
+ && apt install -y pkg-config \
+ && rustup component add rustfmt
+
 # Set up application environment
 WORKDIR /app
-COPY ./pyproject.toml ./poetry.lock ./
-RUN poetry install --no-dev --no-interaction
+RUN cargo new --bin {{service-name}} \
+ && mv ./{{service-name}} ./service
+WORKDIR /app/service
+COPY ./service/Cargo.toml ./service/Cargo.lock ./service/build.rs ./
+RUN cargo build --release \
+ && rm -r ./src
+COPY ./service/src ./src
+RUN rm ./target/release/deps/{{service_name}}* \
+ && cargo build --release
 
 # -- Test Image --
 # Code to be mounted into /app
-FROM base as test
-RUN poetry install --no-interaction
-ENTRYPOINT ["./scripts/entry.sh", "test"]
+FROM builder AS test
+WORKDIR /app
+ENTRYPOINT ["./service/scripts/entry.sh"]
 
 # -- Production Image --
 # Runs the service
-FROM base as prod
-COPY ./{{ service_name }} ./{{ service_name }}
-COPY ./scripts ./scripts
-ENTRYPOINT ["./scripts/entry.sh"]
+FROM debian:buster-slim AS prod
+WORKDIR /app
+COPY ./service/scripts ./scripts
+COPY --from=builder /app/service/target/release/{{service-name}} /app/{{service-name}}
+ENTRYPOINT ["./scripts/entry.sh", "app"]

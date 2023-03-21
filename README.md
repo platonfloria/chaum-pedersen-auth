@@ -5,6 +5,10 @@
 ```bash
 make build
 ```
+or
+```bash
+make build service=tests
+```
 
 ## Test image
 
@@ -22,4 +26,8 @@ make terminal
 
 ```bash
 make run
+```
+or
+```bash
+make run_local
 ```

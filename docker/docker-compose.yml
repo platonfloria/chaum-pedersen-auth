@@ -1,0 +1,25 @@
+version: '3.4'
+services:
+  app:
+    image: ${image_name}
+    command: app
+    ports:
+      - 8000:8000
+    volumes:
+      - ..:/app
+
+  tests:
+    profiles:
+      - test
+    image: ${image_name}
+    volumes:
+      - ..:/app
+
+
+networks:
+  default:
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+      - subnet: 10.103.0.1/16

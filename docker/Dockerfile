@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:experimental
 # -- Base Image --
 # Installs application dependencies
-FROM rust:slim-buster as builder
+FROM rust:1.72.0-slim-buster as builder
 
 ARG VERSION
 
@@ -9,15 +9,19 @@ ENV VERSION=$VERSION
 
 # Install dependencies
 RUN apt update \
- && apt install -y pkg-config \
- && rustup component add rustfmt
+ && apt install -y pkg-config curl unzip \
+ && rustup component add rustfmt \
+ && curl -Lo protoc.zip "https://github.com/protocolbuffers/protobuf/releases/download/v3.20.3/protoc-3.20.3-linux-x86_64.zip" \
+ && unzip -q protoc.zip bin/protoc -d /usr/local \
+ && chmod a+x /usr/local/bin/protoc \
+ && rm -rf protoc.zip
 
 # Set up application environment
 WORKDIR /app
 RUN cargo new --bin chaum-pedersen-auth \
  && mv ./chaum-pedersen-auth ./service
 WORKDIR /app/service
-COPY ./service/Cargo.toml ./service/Cargo.lock ./service/build.rs ./
+COPY ./service/zkp_auth.proto ./service/Cargo.toml ./service/Cargo.lock ./service/build.rs ./
 RUN cargo build --release \
  && rm -r ./src
 COPY ./service/src ./src

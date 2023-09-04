@@ -3,5 +3,5 @@
 version = 3
 
 [[package]]
-name = "{{service-name}}"
+name = "chaum-pedersen-auth"
 version = "0.1.0"

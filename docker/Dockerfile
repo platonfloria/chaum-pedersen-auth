@@ -14,14 +14,14 @@ RUN apt update \
 
 # Set up application environment
 WORKDIR /app
-RUN cargo new --bin {{service-name}} \
- && mv ./{{service-name}} ./service
+RUN cargo new --bin chaum-pedersen-auth \
+ && mv ./chaum-pedersen-auth ./service
 WORKDIR /app/service
 COPY ./service/Cargo.toml ./service/Cargo.lock ./service/build.rs ./
 RUN cargo build --release \
  && rm -r ./src
 COPY ./service/src ./src
-RUN rm ./target/release/deps/{{service_name}}* \
+RUN rm ./target/release/deps/chaum_pedersen_auth* \
  && cargo build --release
 
 # -- Test Image --
@@ -35,5 +35,5 @@ ENTRYPOINT ["./service/scripts/entry.sh"]
 FROM debian:buster-slim AS prod
 WORKDIR /app
 COPY ./service/scripts ./scripts
-COPY --from=builder /app/service/target/release/{{service-name}} /app/{{service-name}}
+COPY --from=builder /app/service/target/release/chaum-pedersen-auth /app/chaum-pedersen-auth
 ENTRYPOINT ["./scripts/entry.sh", "app"]

@@ -1,14 +1,17 @@
 build:
-	docker-compose --file ./docker/docker-compose.yml build $(service)
+	docker-compose --project-name chaum-pedersen-auth --file ./docker/docker-compose.yml build $(service)
 
 test:
-	docker-compose --file ./docker/docker-compose.yml --profile=test run --rm tests
+	docker-compose --project-name chaum-pedersen-auth --file ./docker/docker-compose.yml --profile=test run --rm tests
 
 terminal:
-	docker-compose --file ./docker/docker-compose.yml --profile=test run --rm tests sh
+	docker-compose --project-name chaum-pedersen-auth --file ./docker/docker-compose.yml --profile=test run --rm tests sh
 
 run:
-	docker-compose --file ./docker/docker-compose.yml up
+	docker-compose --project-name chaum-pedersen-auth --file ./docker/docker-compose.yml up
 
 run_local:
-	(cd {{ service_name }}; cargo watch -x run)
+	(cd service; cargo watch -x run)
+
+clean:
+	docker-compose --project-name chaum-pedersen-auth --file ./docker/docker-compose.yml --profile test down -v

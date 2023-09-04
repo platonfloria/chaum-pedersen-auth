@@ -1,4 +1,4 @@
-# {{ service-name }}
+# Chaum Pedersen authentication
 
 ## Build image
 

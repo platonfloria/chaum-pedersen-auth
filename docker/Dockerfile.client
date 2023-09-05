@@ -1,44 +1,47 @@
 # syntax=docker/dockerfile:experimental
-# -- Base Image --
-# Installs application dependencies
+# -- Builder Image --
 FROM rust:1.72.0-slim-buster as builder
-
-ARG VERSION
-
-ENV VERSION=$VERSION
 
 # Install dependencies
 RUN apt update \
  && apt install -y pkg-config curl unzip \
+ && rustup target add wasm32-unknown-unknown \
  && rustup component add rustfmt \
+ && cargo install --locked trunk \
  && curl -Lo protoc.zip "https://github.com/protocolbuffers/protobuf/releases/download/v3.20.3/protoc-3.20.3-linux-x86_64.zip" \
  && unzip -q protoc.zip bin/protoc -d /usr/local \
  && chmod a+x /usr/local/bin/protoc \
  && rm -rf protoc.zip
 
-# Set up application environment
+# Prebuild rust dependencies
 WORKDIR /app
 RUN cargo new --bin chaum-pedersen-auth \
  && mv ./chaum-pedersen-auth ./client
 WORKDIR /app/client
 COPY ./zkp_auth.proto /app
-COPY ./client/Cargo.toml ./client/Cargo.lock ./client/build.rs ./
-RUN cargo build --release \
+COPY ./client/Cargo.toml ./client/Cargo.lock ./
+RUN touch ./index.html
+RUN RUSTFLAGS=--cfg=web_sys_unstable_apis trunk build --release \
  && rm -r ./src
-COPY ./client/src ./src
-RUN rm ./target/release/deps/chaum_pedersen_auth* \
- && cargo build --release
 
-# -- Test Image --
-# Code to be mounted into /app
-FROM builder AS test
-WORKDIR /app
-ENTRYPOINT ["./client/scripts/entry.sh"]
+# Build the project
+ARG VERSION
+ARG SERVICE_HOST
+ARG SERVICE_PORT
+ARG P
+ARG Q
+ARG G
+ARG H
+
+COPY ./client/src ./src
+COPY ./client/assets ./assets
+COPY ./client/build.rs ./client/index.html ./
+RUN rm ./target/wasm32-unknown-unknown/release/deps/chaum_pedersen_auth* \
+ && rm -r ./dist \
+ && RUSTFLAGS=--cfg=web_sys_unstable_apis cargo build --release --target wasm32-unknown-unknown \
+ && RUSTFLAGS=--cfg=web_sys_unstable_apis trunk build --release
+
 
 # -- Production Image --
-# Runs the service
-FROM debian:buster-slim AS prod
-WORKDIR /app
-COPY ./client/scripts ./scripts
-COPY --from=builder /app/client/target/release/chaum-pedersen-auth /app/chaum-pedersen-auth
-ENTRYPOINT ["./scripts/entry.sh", "app"]
+FROM nginx as prod
+COPY --from=builder /app/client/dist /usr/share/nginx/html

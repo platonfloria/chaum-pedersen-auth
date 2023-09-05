@@ -20,14 +20,15 @@ services:
       context: ..
       dockerfile: ./docker/Dockerfile.client
       target: prod
-    environment:
-      RUST_LOG: info
-      SERVICE_HOST: service
-      SERVICE_PORT: 50051
-      P: 363967321904221003
-      Q: 7696033
-      G: 165950041202038920
-      H: 96429580695728554
+      args:
+        SERVICE_HOST: localhost
+        SERVICE_PORT: 50051
+        P: 363967321904221003
+        Q: 7696033
+        G: 165950041202038920
+        H: 96429580695728554
+    ports:
+      - 8080:80
 
   tests:
     profiles:

@@ -1,9 +1,12 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, sync::Arc, time::Duration};
 
-use num_bigint::BigUint;
+use http::header::HeaderName;
 use eyre::Result;
+use num_bigint::BigUint;
 use tokio::sync::Mutex;
 use tonic::{transport::Server, Request, Response, Status};
+use tonic_web::GrpcWebLayer;
+use tower_http::cors::{AllowOrigin, CorsLayer};
 use uuid::Uuid;
 
 mod pb2 {
@@ -109,6 +112,14 @@ impl pb2::auth_server::Auth for API {
     }
 }
 
+
+const DEFAULT_MAX_AGE: Duration = Duration::from_secs(24 * 60 * 60);
+const DEFAULT_EXPOSED_HEADERS: [&str; 3] =
+    ["grpc-status", "grpc-message", "grpc-status-details-bin"];
+const DEFAULT_ALLOW_HEADERS: [&str; 4] =
+    ["x-grpc-web", "content-type", "x-user-agent", "grpc-timeout"];
+
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     dotenv::dotenv().ok();
@@ -128,11 +139,40 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .unwrap();
 
     Server::builder()
+        .accept_http1(true)
+        .layer(
+            CorsLayer::new()
+                .allow_origin(AllowOrigin::mirror_request())
+                .allow_credentials(true)
+                .max_age(DEFAULT_MAX_AGE)
+                .expose_headers(
+                    DEFAULT_EXPOSED_HEADERS
+                        .iter()
+                        .cloned()
+                        .map(HeaderName::from_static)
+                        .collect::<Vec<HeaderName>>(),
+                )
+                .allow_headers(
+                    DEFAULT_ALLOW_HEADERS
+                        .iter()
+                        .cloned()
+                        .map(HeaderName::from_static)
+                        .collect::<Vec<HeaderName>>(),
+                ),
+        )
+        .layer(GrpcWebLayer::new())
         .add_service(pb2::auth_server::AuthServer::new(api))
         .add_service(health_service)
         .add_service(reflection_service)
         .serve(addr)
         .await?;
+
+    // Server::builder()
+    //     .add_service(pb2::auth_server::AuthServer::new(api))
+    //     .add_service(health_service)
+    //     .add_service(reflection_service)
+    //     .serve(addr)
+    //     .await?;
 
     Ok(())
 }

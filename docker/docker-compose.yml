@@ -6,6 +6,13 @@ services:
       context: ..
       dockerfile: ./docker/Dockerfile
       target: prod
+    environment:
+      p: 363967321904221003
+      q: 7696033
+      g: 165950041202038920
+      h: 96429580695728554
+    ports:
+      - 50051:50051
 
   tests:
     profiles:

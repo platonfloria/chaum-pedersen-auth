@@ -17,9 +17,9 @@ pub fn App(cx: Scope) -> impl IntoView {
         let protocol = protocol.clone();
         move |_| {
             let mut protocol = protocol.clone();
-            let username = username.get();
-            let password = password.get();
             async move {
+                let username = username.get_untracked();
+                let password = password.get_untracked();
                 match protocol.commit(username).await {
                     Ok((k, auth_id, c)) => {
                         match protocol.verify(password, k, auth_id, c).await {
@@ -44,9 +44,9 @@ pub fn App(cx: Scope) -> impl IntoView {
     let register = create_action(cx, {
         move |_| {
             let mut protocol = protocol.clone();
-            let username = username.get();
-            let password = password.get();
             async move {
+                let username = username.get_untracked();
+                let password = password.get_untracked();
                 if let Err(_) = protocol.register(username, password).await {
                     message.set(Some("Error".into()));
                 } else {

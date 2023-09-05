@@ -42,8 +42,8 @@ impl ChaumPedersen {
         password.hash(&mut hasher);
         let x = hasher.finish().into();
 
-        let y1 = self.g.modpow(&x, &self.p).to_u64_digits()[0];
-        let y2 = self.h.modpow(&x, &self.p).to_u64_digits()[0];
+        let y1 = self.g.modpow(&x, &self.p).to_bytes_be();
+        let y2 = self.h.modpow(&x, &self.p).to_bytes_be();
         let request = Request::new(pb2::RegisterRequest {
                 user: username,
                 y1,
@@ -57,8 +57,8 @@ impl ChaumPedersen {
 
     pub async fn commit(&mut self, username: String) -> Result<(BigUint, String, BigUint)> {
         let k = rand::random::<u64>().into();
-        let r1 = self.g.modpow(&k, &self.p).to_u64_digits()[0];
-        let r2 = self.h.modpow(&k, &self.p).to_u64_digits()[0];
+        let r1 = self.g.modpow(&k, &self.p).to_bytes_be();
+        let r2 = self.h.modpow(&k, &self.p).to_bytes_be();
         let request = Request::new(pb2::AuthenticationChallengeRequest {
                 user: username,
                 r1,
@@ -67,7 +67,7 @@ impl ChaumPedersen {
         );
         let response = self.client.create_authentication_challenge(request).await?.into_inner();
         log::info!("RESPONSE={:?}", response);
-        Ok((k, response.auth_id, response.c.into()))
+        Ok((k, response.auth_id, BigUint::from_bytes_be(&response.c)))
     }
 
     pub async fn verify(&mut self, password: String, k: BigUint, auth_id: String, c: BigUint) -> Result<String> {
@@ -79,7 +79,7 @@ impl ChaumPedersen {
             k - (c * x) % &self.q
         } else {
             &self.q + k - (c * x) % &self.q
-        }.to_u64_digits()[0];
+        }.to_bytes_be();
         let request = Request::new(pb2::AuthenticationAnswerRequest {
                 auth_id,
                 s,

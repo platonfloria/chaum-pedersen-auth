@@ -60,31 +60,35 @@ impl API {
 impl pb2::auth_server::Auth for API {
     async fn register(&self, request: Request<pb2::RegisterRequest>) -> Result<Response<pb2::RegisterResponse>, Status> {
         let request = request.get_ref();
-        log::info!("register {} with (y1={}, y2={})", request.user, request.y1, request.y2);
+        let y1 = BigUint::from_bytes_be(&request.y1);
+        let y2 = BigUint::from_bytes_be(&request.y2);
+        log::info!("register {} with (y1={}, y2={})", request.user, y1, y2);
         self.users.lock().await.insert(request.user.clone(), User {
             name: request.user.clone(),
-            y1: request.y1.into(),
-            y2: request.y2.into(),
+            y1,
+            y2,
         });
         Ok(Response::new(pb2::RegisterResponse {}))
     }
 
     async fn create_authentication_challenge(&self, request: Request<pb2::AuthenticationChallengeRequest>) -> Result<Response<pb2::AuthenticationChallengeResponse>, Status> {
         let request = request.get_ref();
+        let r1 = BigUint::from_bytes_be(&request.r1);
+        let r2 = BigUint::from_bytes_be(&request.r2);
         if let Some(user) = self.users.lock().await.get_mut(&request.user) {
-            log::info!("create_authentication_challenge for user {} with (r1={}, r2={})", user.name, request.r1, request.r2);
+            log::info!("create_authentication_challenge for user {} with (r1={}, r2={})", user.name, r1, r2);
             let auth_id = Uuid::new_v4();
-            let c = rand::random::<u64>() % self.q.to_u64_digits()[0];
+            let c = rand::random::<u64>() % &self.q;
             self.sessions.lock().await.insert(auth_id, Session {
                 id: None,
                 user: user.name.clone(),
-                r1: request.r1.into(),
-                r2: request.r2.into(),
-                c: c.into(),
+                r1,
+                r2,
+                c: c.clone(),
             });
             Ok(Response::new(pb2::AuthenticationChallengeResponse {
                 auth_id: auth_id.to_string(),
-                c,
+                c: c.to_bytes_be(),
             }))
         } else {
             Err(Status::not_found("user not found"))
@@ -93,11 +97,12 @@ impl pb2::auth_server::Auth for API {
 
     async fn verify_authentication(&self, request: Request<pb2::AuthenticationAnswerRequest>) -> Result<Response<pb2::AuthenticationAnswerResponse>, Status> {
         let request = request.get_ref();
-        log::info!("verify_authentication {} with (s={})", request.auth_id, request.s);
+        let s = BigUint::from_bytes_be(&request.s);
+        log::info!("verify_authentication {} with (s={})", request.auth_id, s);
         if let Some(session) = self.sessions.lock().await.get_mut(&Uuid::parse_str(&request.auth_id).expect("invalid auth id")) {
             let user = &self.users.lock().await[&session.user];
-            if session.r1 == self.g.modpow(&request.s.into(), &self.p) * user.y1.modpow(&session.c, &self.p) % &self.p &&
-               session.r2 == self.h.modpow(&request.s.into(), &self.p) * user.y2.modpow(&session.c, &self.p) % &self.p {
+            if session.r1 == self.g.modpow(&s, &self.p) * user.y1.modpow(&session.c, &self.p) % &self.p &&
+               session.r2 == self.h.modpow(&s, &self.p) * user.y2.modpow(&session.c, &self.p) % &self.p {
                 let session_id = Uuid::new_v4();
                 session.id = Some(session_id);
                 Ok(Response::new(pb2::AuthenticationAnswerResponse {

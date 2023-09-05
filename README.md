@@ -62,8 +62,8 @@ grpcurl -plaintext \
 ```bash
 grpcurl -plaintext \
     --d '{
-        "auth_id": "49f72458-cb13-4dc5-b202-a51b19e4e7b6",
-        "s": 3189139
+        "auth_id": "bb7e1fc6-ea9d-4285-95b7-e8c69cfc5704",
+        "s": 2486592
     }' \
     localhost:50051 zkp_auth.Auth.VerifyAuthentication
 ```

@@ -21,7 +21,8 @@ WORKDIR /app
 RUN cargo new --bin chaum-pedersen-auth \
  && mv ./chaum-pedersen-auth ./service
 WORKDIR /app/service
-COPY ./service/zkp_auth.proto ./service/Cargo.toml ./service/Cargo.lock ./service/build.rs ./
+COPY ./zkp_auth.proto /app
+COPY ./service/Cargo.toml ./service/Cargo.lock ./service/build.rs ./
 RUN cargo build --release \
  && rm -r ./src
 COPY ./service/src ./src

@@ -45,10 +45,10 @@ impl API {
         Self {
             users: Arc::new(Mutex::new(HashMap::new())),
             sessions: Arc::new(Mutex::new(HashMap::new())),
-            p: std::env::var("p").expect("p env var must be set.").parse().expect("p is not an integer"),
-            q: std::env::var("q").expect("q env var must be set.").parse().expect("q is not an integer"),
-            g: std::env::var("g").expect("g env var must be set.").parse().expect("g is not an integer"),
-            h: std::env::var("h").expect("h env var must be set.").parse().expect("h is not an integer"),
+            p: std::env::var("P").expect("P env var must be set.").parse().expect("P is not an integer"),
+            q: std::env::var("Q").expect("Q env var must be set.").parse().expect("Q is not an integer"),
+            g: std::env::var("G").expect("G env var must be set.").parse().expect("G is not an integer"),
+            h: std::env::var("H").expect("H env var must be set.").parse().expect("H is not an integer"),
         }
     }
 }

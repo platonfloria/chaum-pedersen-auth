@@ -1,25 +1,40 @@
 version: '3.4'
 
 services:
-  app:
+  service:
     build:
       context: ..
-      dockerfile: ./docker/Dockerfile
+      dockerfile: ./docker/Dockerfile.service
       target: prod
     environment:
-      p: 363967321904221003
-      q: 7696033
-      g: 165950041202038920
-      h: 96429580695728554
+      RUST_LOG: info
+      P: 363967321904221003
+      Q: 7696033
+      G: 165950041202038920
+      H: 96429580695728554
     ports:
       - 50051:50051
+
+  client:
+    build:
+      context: ..
+      dockerfile: ./docker/Dockerfile.client
+      target: prod
+    environment:
+      RUST_LOG: info
+      SERVICE_HOST: service
+      SERVICE_PORT: 50051
+      P: 363967321904221003
+      Q: 7696033
+      G: 165950041202038920
+      H: 96429580695728554
 
   tests:
     profiles:
       - test
     build:
       context: ..
-      dockerfile: ./docker/Dockerfile
+      dockerfile: ./docker/Dockerfile.service
       target: test
     command: test
     volumes:

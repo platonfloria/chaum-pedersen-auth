@@ -1,5 +1,10 @@
+use std::{collections::HashMap, sync::Arc};
+
+use num_bigint::BigUint;
 use eyre::Result;
+use tokio::sync::Mutex;
 use tonic::{transport::Server, Request, Response, Status};
+use uuid::Uuid;
 
 mod pb2 {
     tonic::include_proto!("zkp_auth");
@@ -7,36 +12,110 @@ mod pb2 {
 }
 
 
+#[derive(Debug)]
+struct Session {
+    id: Option<Uuid>,
+    user: String,
+    r1: BigUint,
+    r2: BigUint,
+    c: BigUint,
+}
+
+
+#[derive(Debug)]
+struct User {
+    name: String,
+    y1: BigUint,
+    y2: BigUint,
+}
+
+
 #[derive(Debug, Default)]
-pub struct API {}
+pub struct API {
+    users: Arc<Mutex<HashMap<String, User>>>,
+    sessions: Arc<Mutex<HashMap<Uuid, Session>>>,
+    p: BigUint,
+    q: BigUint,
+    g: BigUint,
+    h: BigUint,
+}
+
+impl API {
+    fn new() -> Self {
+        Self {
+            users: Arc::new(Mutex::new(HashMap::new())),
+            sessions: Arc::new(Mutex::new(HashMap::new())),
+            p: std::env::var("p").expect("p env var must be set.").parse().expect("p is not an integer"),
+            q: std::env::var("q").expect("q env var must be set.").parse().expect("q is not an integer"),
+            g: std::env::var("g").expect("g env var must be set.").parse().expect("g is not an integer"),
+            h: std::env::var("h").expect("h env var must be set.").parse().expect("h is not an integer"),
+        }
+    }
+}
 
 #[tonic::async_trait]
 impl pb2::auth_server::Auth for API {
     async fn register(&self, request: Request<pb2::RegisterRequest>) -> Result<Response<pb2::RegisterResponse>, Status> {
-        println!("register");
+        let request = request.get_ref();
+        log::info!("register {} with (y1={}, y2={})", request.user, request.y1, request.y2);
+        self.users.lock().await.insert(request.user.clone(), User {
+            name: request.user.clone(),
+            y1: request.y1.into(),
+            y2: request.y2.into(),
+        });
         Ok(Response::new(pb2::RegisterResponse {}))
     }
 
     async fn create_authentication_challenge(&self, request: Request<pb2::AuthenticationChallengeRequest>) -> Result<Response<pb2::AuthenticationChallengeResponse>, Status> {
-        println!("create_authentication_challenge");
-        Ok(Response::new(pb2::AuthenticationChallengeResponse {
-            auth_id: "auth_id".into(),
-            c: 1,
-        }))
+        let request = request.get_ref();
+        if let Some(user) = self.users.lock().await.get_mut(&request.user) {
+            log::info!("create_authentication_challenge for user {} with (r1={}, r2={})", user.name, request.r1, request.r2);
+            let auth_id = Uuid::new_v4();
+            let c = rand::random::<u64>() % self.q.to_u64_digits()[0];
+            self.sessions.lock().await.insert(auth_id, Session {
+                id: None,
+                user: user.name.clone(),
+                r1: request.r1.into(),
+                r2: request.r2.into(),
+                c: c.into(),
+            });
+            Ok(Response::new(pb2::AuthenticationChallengeResponse {
+                auth_id: auth_id.to_string(),
+                c,
+            }))
+        } else {
+            Err(Status::not_found("user not found"))
+        }
     }
 
     async fn verify_authentication(&self, request: Request<pb2::AuthenticationAnswerRequest>) -> Result<Response<pb2::AuthenticationAnswerResponse>, Status> {
-        println!("verify_authentication");
-        Ok(Response::new(pb2::AuthenticationAnswerResponse {
-            session_id: "session_id".into(),
-        }))
+        let request = request.get_ref();
+        log::info!("verify_authentication {} with (s={})", request.auth_id, request.s);
+        if let Some(session) = self.sessions.lock().await.get_mut(&Uuid::parse_str(&request.auth_id).expect("invalid auth id")) {
+            let user = &self.users.lock().await[&session.user];
+            if session.r1 == self.g.modpow(&request.s.into(), &self.p) * user.y1.modpow(&session.c, &self.p) % &self.p &&
+               session.r2 == self.h.modpow(&request.s.into(), &self.p) * user.y2.modpow(&session.c, &self.p) % &self.p {
+                let session_id = Uuid::new_v4();
+                session.id = Some(session_id);
+                Ok(Response::new(pb2::AuthenticationAnswerResponse {
+                    session_id: session_id.to_string(),
+                }))
+            } else {
+                Err(Status::unauthenticated("invalid credentials"))
+            }
+        } else {
+            Err(Status::not_found("auth not found"))
+        }
     }
 }
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    dotenv::dotenv().ok();
+    env_logger::init();
+
     let addr = "[::0]:50051".parse()?;
-    let api = API::default();
+    let api = API::new();
 
     let (mut health_reporter, health_service) = tonic_health::server::health_reporter();
     health_reporter

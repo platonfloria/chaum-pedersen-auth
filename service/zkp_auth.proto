@@ -5,26 +5,26 @@ package zkp_auth;
 
 message RegisterRequest {
     string user = 1;
-    int64 y1 = 2;
-    int64 y2 = 3;
+    uint64 y1 = 2;
+    uint64 y2 = 3;
 }
 
 message RegisterResponse {}
 
 message AuthenticationChallengeRequest {
     string user = 1;
-    int64 r1 = 2;
-    int64 r2 = 3;
+    uint64 r1 = 2;
+    uint64 r2 = 3;
 }
 
 message AuthenticationChallengeResponse {
     string auth_id = 1;
-    int64 c = 2;
+    uint64 c = 2;
 }
 
 message AuthenticationAnswerRequest {
     string auth_id = 1;
-    int64 s = 2;
+    uint64 s = 2;
 }
 
 message AuthenticationAnswerResponse {

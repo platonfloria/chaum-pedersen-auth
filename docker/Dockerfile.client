@@ -32,6 +32,7 @@ ARG P
 ARG Q
 ARG G
 ARG H
+ARG K256_H_OFFSET
 
 COPY ./client/src ./src
 COPY ./client/assets ./assets

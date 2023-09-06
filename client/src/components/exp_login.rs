@@ -1,14 +1,13 @@
 use leptonic::prelude::*;
 use leptos::*;
 use num_bigint::BigUint;
+use protocol::ChaumPedersen;
 use tonic::Request;
 use tonic_web_wasm_client::Client;
 
 mod pb2 {
     tonic::include_proto!("zkp_auth");
 }
-
-use crate::protocol::ChaumPedersen;
 
 
 #[component]

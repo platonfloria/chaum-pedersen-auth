@@ -4,14 +4,13 @@ use k256::{
 };
 use leptonic::prelude::*;
 use leptos::*;
+use protocol::ChaumPedersenK256;
 use tonic::Request;
 use tonic_web_wasm_client::Client;
 
 mod pb2 {
     tonic::include_proto!("zkp_auth");
 }
-
-use crate::protocol::ChaumPedersenK256;
 
 
 #[component]

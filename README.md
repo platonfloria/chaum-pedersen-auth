@@ -1,35 +1,33 @@
 # Chaum Pedersen authentication
+This project implements a simple server/client authentication using Chaum Pedersen zero knowledge sigma protocol.
+There are two variants of this protocol implemented, one is using exponentiation, the other one is using k256 elliptic curve.
 
-## Build image
+When run in docker-compose or locally, by default, the grcp server is exposed on http://localhost:50051 and web client is exposed on http://localhost:8080.
 
+
+## Build images
 ```bash
 make build
 ```
-or
-```bash
-make build service=tests
-```
 
-## Test image
-
+## Run unit tests
 ```bash
 make test
 ```
 
-## Run command inside the container
-
-```bash
-make terminal
-```
-
-## Run stack
-
+## Run stack in docker compose
 ```bash
 make run
 ```
-or
+
+## Run server locally
 ```bash
-make run_local
+make run_local_server
+```
+
+## Run client locally
+```bash
+make run_local_client
 ```
 
 ## Smoke testing
@@ -41,8 +39,8 @@ https://github.com/fullstorydev/grpcurl#installation
 grpcurl -plaintext \
     --d '{
         "user": "testuser",
-        "y1": 53417206097666059,
-        "y2": 244824878090066088
+        "y1": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAL3GqnpYYAs=",
+        "y2": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA2XK7fK8mKg="
     }' \
     localhost:50051 zkp_auth.Auth.Register
 ```
@@ -52,8 +50,8 @@ grpcurl -plaintext \
 grpcurl -plaintext \
     --d '{
         "user": "testuser",
-        "r1": 102394247258157955,
-        "r2": 234539649658649999
+        "r1": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWvHBn7ds4M=",
+        "r2": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA0FAkZel/Y8="
     }' \
     localhost:50051 zkp_auth.Auth.CreateAuthenticationChallenge
 ```
@@ -62,8 +60,8 @@ grpcurl -plaintext \
 ```bash
 grpcurl -plaintext \
     --d '{
-        "auth_id": "bb7e1fc6-ea9d-4285-95b7-e8c69cfc5704",
-        "s": 2486592
+        "auth_id": "11fc1350-1288-4bfd-9322-f0e9d491cd77",
+        "s": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAl8UA="
     }' \
     localhost:50051 zkp_auth.Auth.VerifyAuthentication
 ```

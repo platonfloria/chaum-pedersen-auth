@@ -203,7 +203,7 @@ dependencies = [
  "log",
  "num-bigint",
  "prost",
- "rand",
+ "protocol",
  "tokio",
  "tonic",
  "tonic-build",
@@ -953,6 +953,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cebe0a918c97f86c217b0f76fd754e966f8b9f41595095cf7d74cb4e59d730f6"
 dependencies = [
  "prost",
+]
+
+[[package]]
+name = "protocol"
+version = "0.1.0"
+dependencies = [
+ "k256",
+ "num-bigint",
+ "rand",
 ]
 
 [[package]]

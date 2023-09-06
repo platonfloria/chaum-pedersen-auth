@@ -1,11 +1,10 @@
-mod protocol;
-
 use std::{collections::HashMap, sync::Arc, time::Duration};
 
 use http::header::HeaderName;
 use eyre::Result;
 use k256::{elliptic_curve::{PrimeField, point::DecompressPoint, subtle::Choice, generic_array::GenericArray}, AffinePoint, Scalar};
 use num_bigint::BigUint;
+use protocol::{ChaumPedersen, ChaumPedersenK256};
 use tokio::sync::Mutex;
 use tonic::{transport::Server, Request, Response, Status};
 use tonic_web::GrpcWebLayer;
@@ -17,9 +16,6 @@ mod pb2 {
     pub(crate) const FILE_DESCRIPTOR_SET: &[u8] = tonic::include_file_descriptor_set!("descriptor");
 }
 
-use protocol::ChaumPedersen;
-
-use crate::protocol::ChaumPedersenK256;
 
 
 #[derive(Debug)]

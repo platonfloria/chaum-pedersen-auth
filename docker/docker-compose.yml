@@ -31,14 +31,3 @@ services:
         K256_H_OFFSET: 107211496160805127
     ports:
       - 8080:80
-
-  tests:
-    profiles:
-      - test
-    build:
-      context: ..
-      dockerfile: ./docker/Dockerfile.service
-      target: test
-    command: test
-    volumes:
-      - ..:/app

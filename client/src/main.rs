@@ -1,5 +1,4 @@
 mod components;
-mod protocol;
 
 use leptos::*;
 

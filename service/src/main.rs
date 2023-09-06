@@ -1,3 +1,5 @@
+mod protocol;
+
 use std::{collections::HashMap, sync::Arc, time::Duration};
 
 use http::header::HeaderName;
@@ -13,6 +15,8 @@ mod pb2 {
     tonic::include_proto!("zkp_auth");
     pub(crate) const FILE_DESCRIPTOR_SET: &[u8] = tonic::include_file_descriptor_set!("descriptor");
 }
+
+use protocol::ChaumPedersen;
 
 
 #[derive(Debug)]
@@ -33,14 +37,10 @@ struct User {
 }
 
 
-#[derive(Debug, Default)]
 pub struct API {
     users: Arc<Mutex<HashMap<String, User>>>,
     sessions: Arc<Mutex<HashMap<Uuid, Session>>>,
-    p: BigUint,
-    q: BigUint,
-    g: BigUint,
-    h: BigUint,
+    protocol: ChaumPedersen,
 }
 
 impl API {
@@ -48,10 +48,12 @@ impl API {
         Self {
             users: Arc::new(Mutex::new(HashMap::new())),
             sessions: Arc::new(Mutex::new(HashMap::new())),
-            p: std::env::var("P").expect("P env var must be set.").parse().expect("P is not an integer"),
-            q: std::env::var("Q").expect("Q env var must be set.").parse().expect("Q is not an integer"),
-            g: std::env::var("G").expect("G env var must be set.").parse().expect("G is not an integer"),
-            h: std::env::var("H").expect("H env var must be set.").parse().expect("H is not an integer"),
+            protocol: ChaumPedersen::new(
+                std::env::var("P").expect("P env var must be set.").parse().expect("P is not an integer"),
+                std::env::var("Q").expect("Q env var must be set.").parse().expect("Q is not an integer"),
+                std::env::var("G").expect("G env var must be set.").parse().expect("G is not an integer"),
+                std::env::var("H").expect("H env var must be set.").parse().expect("H is not an integer"),
+            ),
         }
     }
 }
@@ -78,7 +80,7 @@ impl pb2::auth_server::Auth for API {
         if let Some(user) = self.users.lock().await.get_mut(&request.user) {
             log::info!("create_authentication_challenge for user {} with (r1={}, r2={})", user.name, r1, r2);
             let auth_id = Uuid::new_v4();
-            let c = rand::random::<u64>() % &self.q;
+            let c = self.protocol.challenge();
             self.sessions.lock().await.insert(auth_id, Session {
                 id: None,
                 user: user.name.clone(),
@@ -101,8 +103,7 @@ impl pb2::auth_server::Auth for API {
         log::info!("verify_authentication {} with (s={})", request.auth_id, s);
         if let Some(session) = self.sessions.lock().await.get_mut(&Uuid::parse_str(&request.auth_id).expect("invalid auth id")) {
             let user = &self.users.lock().await[&session.user];
-            if session.r1 == self.g.modpow(&s, &self.p) * user.y1.modpow(&session.c, &self.p) % &self.p &&
-               session.r2 == self.h.modpow(&s, &self.p) * user.y2.modpow(&session.c, &self.p) % &self.p {
+            if self.protocol.verify(&user.y1, &user.y2, &session.r1, &session.r2, &session.c, &s) {
                 let session_id = Uuid::new_v4();
                 session.id = Some(session_id);
                 Ok(Response::new(pb2::AuthenticationAnswerResponse {
@@ -171,13 +172,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .add_service(reflection_service)
         .serve(addr)
         .await?;
-
-    // Server::builder()
-    //     .add_service(pb2::auth_server::AuthServer::new(api))
-    //     .add_service(health_service)
-    //     .add_service(reflection_service)
-    //     .serve(addr)
-    //     .await?;
 
     Ok(())
 }

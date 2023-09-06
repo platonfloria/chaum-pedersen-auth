@@ -9,3 +9,6 @@ build:
 run:
 	mkdir -p ./generated
 	trunk serve
+
+test:
+	cargo test

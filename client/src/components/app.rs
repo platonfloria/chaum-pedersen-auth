@@ -53,7 +53,7 @@ pub fn App(cx: Scope) -> impl IntoView {
                         let auth_id = response.auth_id;
                         let c = BigUint::from_bytes_be(&response.c);
 
-                        let s = protocol.solve(password, &k, &c);
+                        let s = protocol.solve(&password, &k, &c);
                         let request = Request::new(pb2::AuthenticationAnswerRequest {
                             auth_id,
                             s: s.to_bytes_be(),
@@ -86,7 +86,7 @@ pub fn App(cx: Scope) -> impl IntoView {
             async move {
                 let username = username.get_untracked();
                 let password = password.get_untracked();
-                let (y1, y2) = protocol.register(password);
+                let (y1, y2) = protocol.register(&password);
                 let request = Request::new(pb2::RegisterRequest {
                     user: username,
                     y1: y1.to_bytes_be(),

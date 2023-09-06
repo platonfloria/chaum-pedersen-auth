@@ -10,6 +10,7 @@ dotenv = "0.15.0"
 env_logger = "0.10.0"
 eyre = "0.6.8"
 http = "0.2.9"
+k256 = { version = "0.13.1", features = ["arithmetic"] }
 log = "0.4.20"
 num-bigint = "0.4.4"
 prost = "0.12.0"

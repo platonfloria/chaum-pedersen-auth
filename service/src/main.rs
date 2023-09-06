@@ -4,6 +4,7 @@ use std::{collections::HashMap, sync::Arc, time::Duration};
 
 use http::header::HeaderName;
 use eyre::Result;
+use k256::{elliptic_curve::{PrimeField, point::DecompressPoint, subtle::Choice, generic_array::GenericArray}, AffinePoint, Scalar};
 use num_bigint::BigUint;
 use tokio::sync::Mutex;
 use tonic::{transport::Server, Request, Response, Status};
@@ -18,13 +19,21 @@ mod pb2 {
 
 use protocol::ChaumPedersen;
 
+use crate::protocol::ChaumPedersenK256;
+
+
+#[derive(Debug)]
+enum Credentials {
+    Exp((BigUint, BigUint)),
+    K256((AffinePoint, AffinePoint)),
+}
+
 
 #[derive(Debug)]
 struct Session {
     id: Option<Uuid>,
     user: String,
-    r1: BigUint,
-    r2: BigUint,
+    r: Credentials,
     c: BigUint,
 }
 
@@ -32,8 +41,7 @@ struct Session {
 #[derive(Debug)]
 struct User {
     name: String,
-    y1: BigUint,
-    y2: BigUint,
+    y: Credentials,
 }
 
 
@@ -41,6 +49,7 @@ pub struct API {
     users: Arc<Mutex<HashMap<String, User>>>,
     sessions: Arc<Mutex<HashMap<Uuid, Session>>>,
     protocol: ChaumPedersen,
+    protocol_k256: ChaumPedersenK256,
 }
 
 impl API {
@@ -54,6 +63,9 @@ impl API {
                 std::env::var("G").expect("G env var must be set.").parse().expect("G is not an integer"),
                 std::env::var("H").expect("H env var must be set.").parse().expect("H is not an integer"),
             ),
+            protocol_k256: ChaumPedersenK256::new(
+                std::env::var("K256_H_OFFSET").expect("K256_H_OFFSET env var must be set.").parse().expect("K256_H_OFFSET is not an integer"),
+            ),
         }
     }
 }
@@ -64,13 +76,17 @@ impl pb2::auth_server::Auth for API {
         let request = request.get_ref();
         let y1 = BigUint::from_bytes_be(&request.y1);
         let y2 = BigUint::from_bytes_be(&request.y2);
-        log::info!("register {} with (y1={}, y2={})", request.user, y1, y2);
-        self.users.lock().await.insert(request.user.clone(), User {
-            name: request.user.clone(),
-            y1,
-            y2,
-        });
-        Ok(Response::new(pb2::RegisterResponse {}))
+        let mut users = self.users.lock().await;
+        if users.contains_key(&request.user) {
+            Err(Status::already_exists("user already is registered"))
+        } else {
+            log::info!("register {} with (y1={}, y2={})", request.user, y1, y2);
+            users.insert(request.user.clone(), User {
+                name: request.user.clone(),
+                y: Credentials::Exp((y1, y2)),
+            });
+            Ok(Response::new(pb2::RegisterResponse {}))
+        }
     }
 
     async fn create_authentication_challenge(&self, request: Request<pb2::AuthenticationChallengeRequest>) -> Result<Response<pb2::AuthenticationChallengeResponse>, Status> {
@@ -84,8 +100,7 @@ impl pb2::auth_server::Auth for API {
             self.sessions.lock().await.insert(auth_id, Session {
                 id: None,
                 user: user.name.clone(),
-                r1,
-                r2,
+                r: Credentials::Exp((r1, r2)),
                 c: c.clone(),
             });
             Ok(Response::new(pb2::AuthenticationChallengeResponse {
@@ -103,17 +118,115 @@ impl pb2::auth_server::Auth for API {
         log::info!("verify_authentication {} with (s={})", request.auth_id, s);
         if let Some(session) = self.sessions.lock().await.get_mut(&Uuid::parse_str(&request.auth_id).expect("invalid auth id")) {
             let user = &self.users.lock().await[&session.user];
-            if self.protocol.verify(&user.y1, &user.y2, &session.r1, &session.r2, &session.c, &s) {
-                let session_id = Uuid::new_v4();
-                session.id = Some(session_id);
-                Ok(Response::new(pb2::AuthenticationAnswerResponse {
-                    session_id: session_id.to_string(),
-                }))
+            if let (Credentials::Exp((y1, y2)), Credentials::Exp((r1, r2))) = (&user.y, &session.r) {
+                if self.protocol.verify(y1, y2, r1, r2, &session.c, &s) {
+                    let session_id = Uuid::new_v4();
+                    session.id = Some(session_id);
+                    Ok(Response::new(pb2::AuthenticationAnswerResponse {
+                        session_id: session_id.to_string(),
+                    }))
+                } else {
+                    Err(Status::unauthenticated("invalid password"))
+                }
             } else {
-                Err(Status::unauthenticated("invalid credentials"))
+                Err(Status::unauthenticated("invalid protocol"))
             }
         } else {
             Err(Status::not_found("auth not found"))
+        }
+    }
+
+
+    async fn k256_register(&self, request: Request<pb2::K256RegisterRequest>) -> Result<Response<pb2::K256RegisterResponse>, Status> {
+        let request = request.get_ref();
+        if let (Some(y1), Some(y2)) = (&request.y1, &request.y2) {
+            if let (Some(y1), Some(y2)) = (
+                AffinePoint::decompress(y1.x.as_slice().into(), Choice::from(y1.is_y_odd as u8)).into(),
+                AffinePoint::decompress(y2.x.as_slice().into(), Choice::from(y2.is_y_odd as u8)).into(),
+            ) {
+                let mut users = self.users.lock().await;
+                if users.contains_key(&request.user) {
+                    Err(Status::already_exists("user already is registered"))
+                } else {
+                    log::info!("register {} with (y1={:?}, y2={:?})", request.user, y1, y2);
+                    users.insert(request.user.clone(), User {
+                        name: request.user.clone(),
+                        y: Credentials::K256((y1, y2)),
+                    });
+                    Ok(Response::new(pb2::K256RegisterResponse {}))
+                }
+            } else {
+                Err(Status::invalid_argument("y1 point or y2 point is invalid"))
+            }
+        } else {
+            Err(Status::invalid_argument("y1 or y2 is missing"))
+        }
+    }
+
+    async fn k256_create_authentication_challenge(&self, request: Request<pb2::K256AuthenticationChallengeRequest>) -> Result<Response<pb2::K256AuthenticationChallengeResponse>, Status> {
+        let request = request.get_ref();
+        if let (Some(r1), Some(r2)) = (&request.r1, &request.r2) {
+            if let (Some(r1), Some(r2)) = (
+                AffinePoint::decompress(r1.x.as_slice().into(), Choice::from(r1.is_y_odd as u8)).into(),
+                AffinePoint::decompress(r2.x.as_slice().into(), Choice::from(r2.is_y_odd as u8)).into(),
+            ) {
+                if let Some(user) = self.users.lock().await.get_mut(&request.user) {
+                    log::info!("create_authentication_challenge for user {} with (r1={:?}, r2={:?})", user.name, r1, r2);
+                    let auth_id = Uuid::new_v4();
+                    let c = self.protocol_k256.challenge();
+                    self.sessions.lock().await.insert(auth_id, Session {
+                        id: None,
+                        user: user.name.clone(),
+                        r: Credentials::K256((r1, r2)),
+                        c: BigUint::from_bytes_be(c.to_repr().as_slice()),
+                    });
+                    Ok(Response::new(pb2::K256AuthenticationChallengeResponse {
+                        auth_id: auth_id.to_string(),
+                        c: c.to_repr().to_vec(),
+                    }))
+                } else {
+                    Err(Status::not_found("user not found"))
+                }
+            } else {
+                Err(Status::invalid_argument("r1 point or r2 point is invalid"))
+            }
+        } else {
+            Err(Status::invalid_argument("r1 or r2 is missing"))
+        }
+    }
+
+    async fn k256_verify_authentication(&self, request: Request<pb2::K256AuthenticationAnswerRequest>) -> Result<Response<pb2::K256AuthenticationAnswerResponse>, Status> {
+        let request = request.get_ref();
+        if let Some(s) = Scalar::from_repr(GenericArray::clone_from_slice(request.s.as_slice())).into() {
+            if let Some(session) = self.sessions.lock().await.get_mut(&Uuid::parse_str(&request.auth_id).expect("invalid auth id")) {
+                let user = &self.users.lock().await[&session.user];
+                let mut c: [u8; 32] = [0u8; 32];
+                for (i, v) in session.c.to_bytes_be().iter().rev().enumerate() {
+                    c[31 - i] = *v;
+                }
+                if let (
+                    Credentials::K256((y1, y2)),
+                    Credentials::K256((r1, r2)),
+                    Some(c)
+                ) = (&user.y, &session.r, Scalar::from_repr(c.into()).into()) {
+                    log::info!("verify_authentication {} with (s={:?})", request.auth_id, s);
+                    if self.protocol_k256.verify(y1, y2, r1, r2, &c, &s) {
+                        let session_id = Uuid::new_v4();
+                        session.id = Some(session_id);
+                        Ok(Response::new(pb2::K256AuthenticationAnswerResponse {
+                            session_id: session_id.to_string(),
+                        }))
+                    } else {
+                        Err(Status::unauthenticated("invalid password"))
+                    }
+                } else {
+                    Err(Status::unauthenticated("invalid protocol"))
+                }
+            } else {
+                Err(Status::not_found("auth not found"))
+            }
+        } else {
+            Err(Status::unauthenticated("invalid password"))
         }
     }
 }

@@ -22,6 +22,7 @@ RUN cargo new --bin chaum-pedersen-auth \
  && mv ./chaum-pedersen-auth ./service
 WORKDIR /app/service
 COPY ./zkp_auth.proto /app
+COPY ./protocol /app/protocol
 COPY ./service/Cargo.toml ./service/Cargo.lock ./service/build.rs ./
 RUN cargo build --release \
  && rm -r ./src

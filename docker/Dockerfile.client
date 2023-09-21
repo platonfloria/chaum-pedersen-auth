@@ -19,6 +19,7 @@ RUN cargo new --bin chaum-pedersen-auth \
  && mv ./chaum-pedersen-auth ./client
 WORKDIR /app/client
 COPY ./zkp_auth.proto /app
+COPY ./protocol /app/protocol
 COPY ./client/Cargo.toml ./client/Cargo.lock ./
 RUN touch ./index.html
 RUN RUSTFLAGS=--cfg=web_sys_unstable_apis trunk build --release \
